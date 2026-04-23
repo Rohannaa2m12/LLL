@@ -446,3 +446,115 @@
             </div>
           </div>
           <div style="margin-top:12px" class="split">
+            <div>
+              <div class="tiny dim">Market</div>
+              <div class="codeBox" id="marketBox"></div>
+            </div>
+            <div>
+              <div class="tiny dim">Pools</div>
+              <div class="chartWrap">
+                <canvas id="poolChart" width="420" height="160"></canvas>
+              </div>
+              <div class="codeBox" id="poolsBox" style="margin-top:10px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bottom">
+      <div class="panel">
+        <div class="panelHeader">
+          <div class="title">ORACLE <span class="tag">PAYLOAD</span></div>
+          <div class="right"><span class="dim">offline builder</span></div>
+        </div>
+        <div class="panelBody">
+          <div class="k">
+            <div class="kv"><span class="key">oracleKeyHint</span> <span class="val mono" id="oracleKeyHint">—</span></div>
+            <div class="kv"><span class="key">digest</span> <span class="val mono" id="oracleDigest">—</span></div>
+          </div>
+          <div style="height:10px"></div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap">
+            <button class="btn amber" id="btnOracleBuild">BUILD JSON</button>
+            <button class="btn" id="btnCopyJson">COPY JSON</button>
+            <button class="btn" id="btnCopySig">COPY SIG</button>
+            <button class="btn cyan" id="btnCopyDigest">COPY DIGEST</button>
+          </div>
+          <div style="height:10px"></div>
+          <div class="codeBox" id="oracleBox"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panelHeader">
+          <div class="title">HELP <span class="tag">CHEATSHEET</span></div>
+          <div class="right"><span class="dim">no network calls</span></div>
+        </div>
+        <div class="panelBody">
+          <div class="codeBox">
+<span class="dim">Commands</span>
+help
+clear
+watch list
+watch add LAMA/USD
+watch del ETH/USD
+sym LAMA/USD
+mk 100 0.5 2 10 20
+bet up 250
+bet down 250
+bet flat 250
+settle 101.25
+oracle id
+oracle build
+
+<span class="dim">Hotkeys</span>
+Ctrl/Cmd+K focus cmd
+Ctrl/Cmd+T density
+Ctrl/Cmd+Shift+C copy last line
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">
+    <div class="t" id="toastT">—</div>
+    <div class="m" id="toastM">—</div>
+  </div>
+
+  <script>
+    // =============================================================
+    // LLL — local "lama terminal"
+    // =============================================================
+
+    const $ = (q, el=document) => el.querySelector(q);
+    const $$ = (q, el=document) => Array.from(el.querySelectorAll(q));
+
+    const state = {
+      density: "normal",
+      watch: ["LAMA/USD","ETH/USD","BTC/USD","LLL/ETH","XII/BASE"],
+      activeSym: "LAMA/USD",
+      activeMktId: 0,
+      markets: new Map(),
+      quotes: new Map(),
+      tape: [],
+      lastOracleJson: "",
+      lastOracleSig: "",
+      lastOracleDigest: "",
+      oracleNonce: 0,
+      oracleKey: null,
+      hb: {
+        enabled: true,
+        base: (localStorage.getItem("LLL_HB_BASE") || "http://127.0.0.1:8787").replace(/\/+$/,""),
+        online: false,
+        lastErr: "",
+        lastStatusAt: 0,
+        lastSyncAt: 0,
+        markets: [],
+        bets: [],
+        prices: new Map(), // sym -> {px, prev, spark}
+      },
+    };
+
+    async function hbFetch(path, {method="GET", body=null, timeoutMs=1400} = {}){
+      const u = state.hb.base + path;
