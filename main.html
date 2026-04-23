@@ -894,3 +894,115 @@ Ctrl/Cmd+Shift+C copy last line
         symbol,
         strike,
         band,
+        openAt: n + openSec,
+        lockAt: n + lockSec,
+        closeAt: n + closeSec,
+        bets: [],
+        poolUp: 0,
+        poolDown: 0,
+        poolFlat: 0,
+        poolTotal: 0,
+        settle: null,
+      };
+      state.markets.set(id, m);
+      state.activeMktId = id;
+      $("#activeMkt").textContent = "#" + id;
+      return m;
+    }
+
+    function marketPhase(m){
+      const t = nowSec();
+      if (!m) return "—";
+      if (m.settle) return "SETTLED";
+      if (t < m.openAt) return "PREOPEN";
+      if (t < m.lockAt) return "OPEN";
+      if (t < m.closeAt) return "LOCKED";
+      return "CLOSEWAIT";
+    }
+
+    function placeBet(m, who, bucket, amt){
+      if (!m) return false;
+      const t = nowSec();
+      if (t < m.openAt || t >= m.lockAt) return false;
+      m.bets.push({who, bucket, amt});
+      if (bucket === "UP") m.poolUp += amt;
+      if (bucket === "DOWN") m.poolDown += amt;
+      if (bucket === "FLAT") m.poolFlat += amt;
+      m.poolTotal += amt;
+      return true;
+    }
+
+    function settleMarket(m, price){
+      if (!m) return null;
+      if (nowSec() < m.closeAt) return null;
+      const delta = Math.abs(price - m.strike);
+      let win = "FLAT";
+      if (delta > m.band) win = (price > m.strike ? "UP" : "DOWN");
+      const wp = (win==="UP") ? m.poolUp : (win==="DOWN" ? m.poolDown : m.poolFlat);
+      m.settle = {price, win, winningPool: wp};
+      return m.settle;
+    }
+
+    function renderMarketBoxes(){
+      const m = state.markets.get(state.activeMktId) || null;
+      const q = getQuote(state.activeSym);
+
+      $("#marketBox").textContent = [
+        `ACTIVE SYMBOL: ${state.activeSym}`,
+        `ACTIVE MARKET: ${m ? "#"+m.id : "—"}`,
+        "",
+        "QUOTE",
+        `  last=${fmt.money2(q.price)}  chg%=${fmt.pct(q.prev>0 ? (q.price-q.prev)/q.prev*100 : 0)}`,
+        `  spark=${q.spark}`,
+        "",
+        m ? "MARKET" : "TIP",
+        m ? `  symbol=${m.symbol}` : "  - create a market with NEW or: mk <strike> <band> <openSec> <lockSec> <closeSec>",
+        m ? `  strike=${fmt.money2(m.strike)}` : "  - then bet: bet up|down|flat <amt>",
+        m ? `  band  =${fmt.money2(m.band)}` : "",
+        m ? `  openAt=${fmtEpoch(m.openAt)}` : "",
+        m ? `  lockAt=${fmtEpoch(m.lockAt)}` : "",
+        m ? `  closeAt=${fmtEpoch(m.closeAt)}` : "",
+        m ? "" : "",
+        m ? "POOLS" : "",
+        m ? `  UP   =${fmt.money2(m.poolUp)}` : "",
+        m ? `  DOWN =${fmt.money2(m.poolDown)}` : "",
+        m ? `  FLAT =${fmt.money2(m.poolFlat)}` : "",
+        m ? `  TOTAL=${fmt.money2(m.poolTotal)}` : "",
+        m ? "" : "",
+        m ? "POSITIONS" : "",
+        m ? (m.bets.length ? m.bets.map(b=>`  ${b.who.padEnd(5)} ${b.bucket.padEnd(4)} ${fmt.money2(b.amt)}`).join("\n") : "  (none)") : "",
+        m ? "" : "",
+        m ? "STATE" : "",
+        m ? `  phase=${marketPhase(m)}` : "",
+        m ? (m.settle ? `  settled: final=${fmt.money2(m.settle.price)} winner=${m.settle.win}` : "  settle: after close") : "",
+      ].filter(Boolean).join("\n");
+
+      $("#poolsBox").textContent = m ? [
+        `poolUp=${fmt.money2(m.poolUp)}`,
+        `poolDown=${fmt.money2(m.poolDown)}`,
+        `poolFlat=${fmt.money2(m.poolFlat)}`,
+        `poolTotal=${fmt.money2(m.poolTotal)}`,
+        `phase=${marketPhase(m)}`,
+        m.settle ? `final=${fmt.money2(m.settle.price)} winner=${m.settle.win}` : "final=—",
+      ].join("\n") : "no active market";
+
+      drawPoolsChart(m);
+      renderOracleBox(false);
+    }
+
+    function drawPoolsChart(m){
+      const c = $("#poolChart");
+      const ctx = c.getContext("2d");
+      const W = c.width, H = c.height;
+      ctx.clearRect(0,0,W,H);
+      ctx.fillStyle = "rgba(0,0,0,.14)";
+      ctx.fillRect(0,0,W,H);
+      ctx.strokeStyle = "rgba(255,255,255,.07)";
+      ctx.strokeRect(0.5,0.5,W-1,H-1);
+
+      const up = m ? m.poolUp : 0;
+      const dn = m ? m.poolDown : 0;
+      const fl = m ? m.poolFlat : 0;
+      const tot = Math.max(1e-9, up+dn+fl);
+      const bars = [
+        {k:"UP", v:up, col:"rgba(70,220,160,.85)"},
