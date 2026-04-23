@@ -334,3 +334,115 @@
       .side{grid-column:1; grid-row:auto}
       .bottom{grid-column:1; grid-template-columns:1fr}
     }
+  </style>
+</head>
+<body>
+  <div class="grid">
+    <div class="top">
+      <div class="brand">
+        <div class="logo mono">LLL</div>
+        <div>
+          <h1>LLL — LAMA LOVE LEDGER</h1>
+          <div class="sub">AI finance terminal | offline sim | LamaXII companion</div>
+        </div>
+      </div>
+      <div class="topRight">
+        <div class="chip"><span class="dim">chain</span> <b>EVM</b> <span class="dim">mode</span> <b>SIM</b></div>
+        <div class="chip"><span class="dim">oracleNonce</span> <b id="oracleNonceChip">—</b></div>
+        <div class="chip"><span class="dim">now</span> <b id="clockChip">—</b></div>
+        <button class="btn cyan" id="btnFocus">FOCUS CMD</button>
+        <button class="btn primary" id="btnDensity">DENSITY</button>
+      </div>
+    </div>
+
+    <div class="panel main term">
+      <div class="panelHeader">
+        <div class="title">TERMINAL <span class="tag">LLL</span></div>
+        <div class="right">
+          <span class="dim">hotkeys:</span>
+          <span class="mono">Ctrl/Cmd+K</span>
+          <span class="mono">Ctrl/Cmd+T</span>
+          <span class="mono">Ctrl/Cmd+Shift+C</span>
+        </div>
+      </div>
+      <div class="termOut" id="termOut"></div>
+      <div class="termCmd">
+        <div class="prompt">CMD</div>
+        <input id="cmdIn" spellcheck="false" autocomplete="off" placeholder='try: help | watch add LAMA/USD | sym LAMA/USD | mk 100 0.5 2 10 20 | bet up 250 | settle 101.25 | oracle build' />
+        <button class="btn amber" id="btnRun">RUN</button>
+        <button class="btn" id="btnClear">CLEAR</button>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="panel" id="watchPanel">
+        <div class="panelHeader">
+          <div class="title">WATCH <span class="tag">TAPE</span></div>
+          <div class="right"><span class="dim">dbl-click symbol</span></div>
+        </div>
+        <div class="panelBody" style="padding:0">
+          <div style="max-height:420px; overflow:auto">
+            <table class="table" id="watchTable">
+              <thead>
+              <tr>
+                <th>SYMBOL</th>
+                <th>LAST</th>
+                <th>CHG%</th>
+                <th>SPARK</th>
+              </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div style="padding:10px 14px; border-top:1px solid var(--edge)">
+            <div class="k">
+              <div class="kv"><span class="key">activeSym</span> <span class="val" id="activeSym">—</span></div>
+              <div class="kv"><span class="key">activeMkt</span> <span class="val" id="activeMkt">—</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" id="marketPanel">
+        <div class="panelHeader">
+          <div class="title">MARKET <span class="tag">SIM</span></div>
+          <div class="right"><span class="dim">one-ticket-per-user model</span></div>
+        </div>
+        <div class="panelBody">
+          <div class="formGrid">
+            <div class="field">
+              <label>Strike</label>
+              <input id="fStrike" value="100.00" />
+            </div>
+            <div class="field">
+              <label>Flat band</label>
+              <input id="fBand" value="0.50" />
+            </div>
+            <div class="field">
+              <label>Open (sec)</label>
+              <input id="fOpen" value="2" />
+            </div>
+            <div class="field">
+              <label>Lock (sec)</label>
+              <input id="fLock" value="10" />
+            </div>
+            <div class="field">
+              <label>Close (sec)</label>
+              <input id="fClose" value="20" />
+            </div>
+            <div class="field">
+              <label>Stake</label>
+              <input id="fStake" value="250.00" />
+            </div>
+            <div class="field row2">
+              <label class="tiny dim">Controls</label>
+              <div style="display:flex; gap:10px; flex-wrap:wrap">
+                <button class="btn cyan" id="btnNewMkt">NEW</button>
+                <button class="btn lime" id="btnUp">UP</button>
+                <button class="btn red" id="btnDown">DOWN</button>
+                <button class="btn amber" id="btnFlat">FLAT</button>
+                <button class="btn primary" id="btnSettle">SETTLE</button>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:12px" class="split">
