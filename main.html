@@ -1342,3 +1342,115 @@ Ctrl/Cmd+Shift+C copy last line
           e.preventDefault();
           $("#cmdIn").focus();
         }
+        if (mod && e.key.toLowerCase() === "t"){
+          e.preventDefault();
+          toggleDensity();
+        }
+        if (mod && e.shiftKey && e.key.toLowerCase() === "c"){
+          e.preventDefault();
+          const last = state.tape.length ? (state.tape[state.tape.length-1].msg) : "";
+          if (copyText(last)) toast("CLIP","copied last line");
+        }
+      });
+    }
+
+    function betUi(bucket){
+      const m = state.markets.get(state.activeMktId) || null;
+      if (!m) return toast("BET","no active market");
+      const amt = Number($("#fStake").value);
+      if (!(amt>0)) return toast("BET","bad amount");
+      if (!placeBet(m, "YOU", bucket, amt)) return toast("BET","market not open");
+      tape("BET", `+ YOU ${bucket} ${fmt.money2(amt)}`);
+      renderMarketBoxes();
+    }
+
+    function toggleDensity(){
+      state.density = (state.density === "normal") ? "dense" : "normal";
+      document.body.style.setProperty("--radius", state.density==="dense" ? "10px" : "12px");
+      $("#termOut").style.fontSize = state.density==="dense" ? "11px" : "12px";
+      $$("#watchTable th, #watchTable td").forEach(td => td.style.padding = state.density==="dense" ? "6px 8px" : "8px 9px");
+      toast("UI", "density=" + state.density);
+    }
+
+    function tick(){
+      $("#clockChip").textContent = fmt.nowHHMMSS();
+      // In HedgeBet mode, quotes are injected via hbTick; keep local sim for any missing symbols.
+      if (!(state.hb.enabled && state.hb.online)) stepQuotes();
+      renderWatch();
+      renderMarketBoxes();
+    }
+
+    function seedBoot(){
+      // pre-seed quotes for watchlist
+      for (const s of state.watch) getQuote(s);
+      tape("BOOT", state.hb.enabled ? `feed: HedgeBet API @ ${state.hb.base}` : "feed: local-sim");
+      tape("BOOT", "oracle: payload builder (mock signature)");
+      tape("BOOT", "panels: WATCH | MARKET | ORACLE");
+      tape("BOOT", "type §help§ for commands");
+    }
+
+    let _hbRot = 0;
+    async function hbTick(){
+      if (!state.hb.enabled) return;
+      const now = Date.now();
+      try{
+        if (now - state.hb.lastStatusAt > 2200){
+          const st = await hbFetch("/api/status");
+          state.hb.online = !!st.ok;
+          state.hb.lastErr = "";
+          state.hb.lastStatusAt = now;
+        }
+        if (!state.hb.online) return;
+
+        if (now - state.hb.lastSyncAt > 2200){
+          const [mk, bt] = await Promise.all([
+            hbFetch("/api/markets"),
+            hbFetch("/api/bets"),
+          ]);
+          state.hb.markets = Array.isArray(mk) ? mk : [];
+          state.hb.bets = Array.isArray(bt) ? bt : [];
+          state.hb.lastSyncAt = now;
+          hbRebuildMarkets();
+        }
+
+        // rotate price requests across watchlist
+        if (state.watch.length){
+          const w = state.watch[_hbRot % state.watch.length];
+          _hbRot++;
+          const sym = hbSymFromWatch(w);
+          const p = await hbFetch(`/api/price?sym=${encodeURIComponent(sym)}`);
+          const px = Number(p.px);
+          if (Number.isFinite(px)){
+            const key = sym;
+            const prev = state.hb.prices.has(key) ? state.hb.prices.get(key).price : px;
+            const sparkPrev = state.hb.prices.has(key) ? state.hb.prices.get(key).spark : spark.seed(24);
+            const q = { price: px, prev, spark: spark.roll(sparkPrev, px, prev) };
+            state.hb.prices.set(key, q);
+            // also mirror the exact watch entry so dbl-click flows still work
+            state.quotes.set(String(w), q);
+            state.quotes.set(sym + "/USD", q);
+          }
+        }
+      } catch (e){
+        state.hb.online = false;
+        state.hb.lastErr = String(e && e.message ? e.message : e);
+      }
+    }
+
+    // =============================================================
+    // Start
+    // =============================================================
+
+    (async function init(){
+      bindUi();
+      seedBoot();
+      await oracleInit();
+      renderWatch();
+      renderMarketBoxes();
+      setInterval(tick, 250);
+      setInterval(hbTick, 800);
+      tick();
+    })();
+  </script>
+</body>
+</html>
