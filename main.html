@@ -782,3 +782,115 @@ Ctrl/Cmd+Shift+C copy last line
       el._t = setTimeout(()=>el.classList.remove("show"), 2200);
     }
 
+    function renderTape(){
+      const out = $("#termOut");
+      const tail = state.tape.slice(-160);
+      out.innerHTML = tail.map(r => (
+        `<div class="row"><div class="t mono">${esc(r.t)} ${esc(r.tag)}</div><div class="msg mono">${markup(r.msg)}</div></div>`
+      )).join("");
+      out.scrollTop = out.scrollHeight;
+    }
+
+    function esc(s){
+      return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+    }
+
+    function markup(s){
+      // tiny markup:
+      //  §text§ => accent
+      //  ·text· => dim
+      //  +word  => ok for first char
+      //  !word  => warn for first char
+      //  -word  => bad for first char
+      let x = esc(s);
+      x = x.replaceAll(/§([^§]+)§/g, '<span class="accent">$1</span>');
+      x = x.replaceAll(/·([^·]+)·/g, '<span class="dim">$1</span>');
+      x = x.replaceAll(/\+([^\s]+)/g, '<span class="ok">+$1</span>');
+      x = x.replaceAll(/\!([^\s]+)/g, '<span class="warn">!$1</span>');
+      x = x.replaceAll(/\-([^\s]+)/g, '<span class="bad">-$1</span>');
+      return x;
+    }
+
+    function normalizeSym(s){
+      let x = String(s||"").trim().toUpperCase().replaceAll(/\s+/g,"");
+      if (!x.includes("/")) return "";
+      if (x.length < 5 || x.length > 18) return "";
+      return x;
+    }
+
+    function getQuote(sym){
+      // If HedgeBet is online, use its price feed for the base symbol.
+      if (state.hb.enabled && state.hb.online){
+        const hbSym = hbSymFromWatch(sym);
+        if (state.hb.prices.has(hbSym)){
+          const q = state.hb.prices.get(hbSym);
+          // Mirror into local cache (so other code paths can read it).
+          state.quotes.set(sym, q);
+          return q;
+        }
+      }
+      if (!state.quotes.has(sym)){
+        const base = 100 + Math.random()*25;
+        state.quotes.set(sym, { price: base, prev: base, spark: spark.seed(24) });
+      }
+      return state.quotes.get(sym);
+    }
+
+    function stepQuotes(){
+      for (const [sym,q] of state.quotes.entries()){
+        q.prev = q.price;
+        const drift = (randn()*0.20);
+        const shock = (Math.random()<0.005) ? (randn()*2.5) : 0;
+        q.price = Math.max(0.0001, q.price + drift + shock);
+        q.spark = spark.roll(q.spark, q.price, q.prev);
+      }
+    }
+
+    function randn(){
+      // Box-Muller
+      let u=0,v=0;
+      while (u===0) u=Math.random();
+      while (v===0) v=Math.random();
+      return Math.sqrt(-2.0*Math.log(u))*Math.cos(2.0*Math.PI*v);
+    }
+
+    function renderWatch(){
+      const tb = $("#watchTable tbody");
+      tb.innerHTML = "";
+      for (const sym of state.watch){
+        const q = getQuote(sym);
+        const chg = q.prev>0 ? (q.price-q.prev)/q.prev*100 : 0;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${esc(sym)}</td>
+          <td>${fmt.money2(q.price)}</td>
+          <td class="${chg>=0?'ok':'bad'}">${esc(fmt.pct(chg))}</td>
+          <td class="mono">${esc(q.spark)}</td>
+        `;
+        tr.ondblclick = () => {
+          state.activeSym = sym;
+          $("#activeSym").textContent = sym;
+          tape("WATCH", `active symbol=${sym}`);
+          renderMarketBoxes();
+        };
+        tb.appendChild(tr);
+      }
+      $("#activeSym").textContent = state.activeSym;
+      $("#activeMkt").textContent = state.activeMktId ? ("#" + state.activeMktId) : "—";
+    }
+
+    function nowSec(){ return Math.floor(Date.now()/1000); }
+    function fmtEpoch(sec){
+      const d = new Date(sec*1000);
+      const p=(n)=>String(n).padStart(2,"0");
+      return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    }
+
+    function createMarket(symbol, strike, band, openSec, lockSec, closeSec){
+      const id = (state.markets.size ? Math.max(...state.markets.keys()) : 0) + 1;
+      const n = nowSec();
+      const m = {
+        id,
+        symbol,
+        strike,
+        band,
