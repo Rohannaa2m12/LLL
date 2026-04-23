@@ -670,3 +670,115 @@ Ctrl/Cmd+Shift+C copy last line
         return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
       },
       pct(p){
+        const s = (p>=0?"+":"") + p.toFixed(2) + "%";
+        return s;
+      },
+      money2(x){
+        return Number(x).toFixed(2);
+      },
+      e8(n){
+        const x = Number(n);
+        if (!Number.isFinite(x)) return 0n;
+        return BigInt(Math.round(x * 1e8));
+      },
+      fromE8(bi){
+        const x = Number(bi) / 1e8;
+        return x;
+      },
+      clamp(x, lo, hi){ return Math.max(lo, Math.min(hi, x)); },
+    };
+
+    const bytes = {
+      concat(...arrs){
+        const n = arrs.reduce((a,b)=>a+(b?b.length:0),0);
+        const out = new Uint8Array(n);
+        let p=0;
+        for (const a of arrs){
+          if (!a) continue;
+          out.set(a, p);
+          p += a.length;
+        }
+        return out;
+      },
+      u64(x){
+        let v = BigInt(x);
+        const out = new Uint8Array(8);
+        for (let i=7;i>=0;i--){
+          out[i] = Number(v & 0xffn);
+          v >>= 8n;
+        }
+        return out;
+      },
+      u256(x){
+        let v = BigInt(x);
+        const out = new Uint8Array(32);
+        for (let i=31;i>=0;i--){
+          out[i] = Number(v & 0xffn);
+          v >>= 8n;
+        }
+        return out;
+      },
+      utf8(s){ return new TextEncoder().encode(String(s)); }
+    };
+
+    const hex = {
+      to(u8){
+        let s="0x";
+        for (const b of u8){
+          s += b.toString(16).padStart(2,"0");
+        }
+        return s;
+      },
+      from(h){
+        let s = String(h||"").trim();
+        if (s.startsWith("0x") || s.startsWith("0X")) s = s.slice(2);
+        if (s.length % 2 === 1) s = "0" + s;
+        const out = new Uint8Array(s.length/2);
+        for (let i=0;i<out.length;i++){
+          out[i] = parseInt(s.slice(i*2, i*2+2), 16);
+        }
+        return out;
+      }
+    };
+
+    // SHA3-256 is used as a deterministic stand-in; web crypto doesn't expose Keccak.
+    async function sha3_256(u8){
+      const buf = await crypto.subtle.digest("SHA-256", u8); // widespread; deterministic
+      return new Uint8Array(buf);
+    }
+
+    const spark = {
+      blocks: ["▁","▂","▃","▄","▅","▆","▇","█"],
+      seed(n=24){
+        let s="";
+        for (let i=0;i<n;i++){
+          s += spark.blocks[Math.floor(Math.random()*spark.blocks.length)];
+        }
+        return s;
+      },
+      roll(prev, now, prior){
+        const p = prior>0 ? (now-prior)/prior : 0;
+        const x = fmt.clamp(p, -0.04, 0.04);
+        const t = (x + 0.04) / 0.08;
+        const idx = Math.round(t * (spark.blocks.length-1));
+        const c = spark.blocks[fmt.clamp(idx,0,spark.blocks.length-1)];
+        const s = (prev && prev.length>=2) ? prev : spark.seed(24);
+        return s.slice(1) + c;
+      }
+    };
+
+    function tape(tag, msg){
+      state.tape.push({t:fmt.nowHHMMSS(), tag, msg});
+      if (state.tape.length > 1200) state.tape.splice(0, state.tape.length-1200);
+      renderTape();
+    }
+
+    function toast(tag, msg){
+      $("#toastT").textContent = `${tag} · ${fmt.nowHHMMSS()}`;
+      $("#toastM").textContent = msg;
+      const el = $("#toast");
+      el.classList.add("show");
+      clearTimeout(el._t);
+      el._t = setTimeout(()=>el.classList.remove("show"), 2200);
+    }
+
