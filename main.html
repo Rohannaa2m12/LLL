@@ -1118,3 +1118,115 @@ Ctrl/Cmd+Shift+C copy last line
       navigator.clipboard.writeText(t).catch(()=>{});
       return true;
     }
+
+    // =============================================================
+    // Command engine (small, functional)
+    // =============================================================
+
+    const cmd = {
+      run: async (raw) => {
+        const line = String(raw||"").trim();
+        if (!line) return;
+        tape("CMD", line);
+        const args = splitArgs(line);
+        const c = (args[0]||"").toLowerCase();
+        try{
+          if (c === "help") return cmdHelp();
+          if (c === "clear") return cmdClear();
+          if (c === "watch") return cmdWatch(args);
+          if (c === "sym") return cmdSym(args);
+          if (c === "mk") return cmdMk(args);
+          if (c === "bet") return cmdBet(args);
+          if (c === "settle") return cmdSettle(args);
+          if (c === "oracle") return cmdOracle(args);
+          tape("CMD", "! unknown command (try help)");
+        } catch (e){
+          tape("CMD", `! error: ${e && e.message ? e.message : e}`);
+        }
+      }
+    };
+
+    function splitArgs(line){
+      const out=[];
+      let cur="", inQ=false;
+      for (let i=0;i<line.length;i++){
+        const c=line[i];
+        if (c === '"'){ inQ=!inQ; continue; }
+        if (!inQ && /\s/.test(c)){
+          if (cur) out.push(cur), cur="";
+        } else cur += c;
+      }
+      if (cur) out.push(cur);
+      return out.map(x=>x.trim()).filter(Boolean);
+    }
+
+    function cmdHelp(){
+      tape("HELP", "§LLL commands§");
+      tape("HELP", " - help");
+      tape("HELP", " - clear");
+      tape("HELP", " - watch list");
+      tape("HELP", " - watch add <SYM>");
+      tape("HELP", " - watch del <SYM>");
+      tape("HELP", " - sym <SYM>");
+      tape("HELP", " - mk <strike> <band> <openSec> <lockSec> <closeSec>");
+      tape("HELP", " - bet <up|down|flat> <amount>");
+      tape("HELP", " - settle <price>");
+      tape("HELP", " - oracle id | oracle build");
+    }
+
+    function cmdClear(){
+      state.tape = [];
+      renderTape();
+      toast("TERM", "cleared");
+    }
+
+    function cmdWatch(args){
+      const op = (args[1]||"list").toLowerCase();
+      if (op === "list"){
+        tape("WATCH", "watchlist:");
+        for (const s of state.watch) tape("WATCH", "  " + s);
+        return;
+      }
+      if (op === "add"){
+        const sym = normalizeSym(args[2]);
+        if (!sym) { tape("WATCH", "! bad symbol"); return; }
+        if (!state.watch.includes(sym)) state.watch.push(sym);
+        getQuote(sym);
+        tape("WATCH", "+ added " + sym);
+        renderWatch();
+        return;
+      }
+      if (op === "del"){
+        const sym = normalizeSym(args[2]);
+        if (!sym) { tape("WATCH", "! bad symbol"); return; }
+        state.watch = state.watch.filter(x=>x!==sym);
+        tape("WATCH", "- removed " + sym);
+        renderWatch();
+        return;
+      }
+      tape("WATCH", "! usage: watch add|del|list");
+    }
+
+    function cmdSym(args){
+      const sym = normalizeSym(args[1]);
+      if (!sym){ tape("SYMBOL", "! usage: sym <AAA/BBB>"); return; }
+      state.activeSym = sym;
+      getQuote(sym);
+      $("#activeSym").textContent = sym;
+      tape("SYMBOL", "active=" + sym);
+      renderWatch();
+      renderMarketBoxes();
+    }
+
+    function cmdMk(args){
+      if (args.length < 6){ tape("MKT", "! usage: mk <strike> <band> <openSec> <lockSec> <closeSec>"); return; }
+      const strike = Number(args[1]);
+      const band = Number(args[2]);
+      const open = Number(args[3]);
+      const lock = Number(args[4]);
+      const close = Number(args[5]);
+      if (!(strike>0 && band>0)) { tape("MKT", "! strike/band must be >0"); return; }
+      if (!(open < lock && lock < close)) { tape("MKT", "! need open<lock<close"); return; }
+      const m = createMarket(state.activeSym, strike, band, open|0, lock|0, close|0);
+      tape("MKT", `+ created #${m.id} ${m.symbol}`);
+      renderWatch();
