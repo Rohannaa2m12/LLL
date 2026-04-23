@@ -558,3 +558,115 @@ Ctrl/Cmd+Shift+C copy last line
 
     async function hbFetch(path, {method="GET", body=null, timeoutMs=1400} = {}){
       const u = state.hb.base + path;
+      const ctrl = new AbortController();
+      const t = setTimeout(()=>ctrl.abort(), timeoutMs);
+      try{
+        const res = await fetch(u, {
+          method,
+          headers: body ? {"Content-Type":"application/json"} : undefined,
+          body: body ? JSON.stringify(body) : null,
+          signal: ctrl.signal
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return await res.json();
+      } finally {
+        clearTimeout(t);
+      }
+    }
+
+    function hbSymFromWatch(w){
+      // Examples: "LAMA/USD" -> "LAMA" ; "ETH/USD" -> "ETH" ; "XII/BASE" -> "XII"
+      const s = String(w||"").trim();
+      const p = s.split("/");
+      return (p[0] || s).toUpperCase();
+    }
+
+    function hbOutcomeToBucket(outcomes, outcome){
+      if (outcomes >= 3){
+        if (outcome === 0) return "DOWN";
+        if (outcome === 1) return "FLAT";
+        return "UP";
+      }
+      return (outcome === 0) ? "DOWN" : "UP";
+    }
+
+    function hbStatusToPhase(m){
+      const s = String(m.status||"").toUpperCase();
+      if (s === "VOID") return "VOID";
+      if (s === "SETTLED") return "SETTLED";
+      const t = nowSec();
+      const o = Number(m.opensAtSec||0);
+      const c = Number(m.closesAtSec||0);
+      if (t < o) return "PREOPEN";
+      if (t < c) return "OPEN";
+      return "LOCKED";
+    }
+
+    function hbRebuildMarkets(){
+      // Convert HedgeBet API markets/bets into the local SIM market shape.
+      state.markets.clear();
+      const betsByMarket = new Map();
+      for (const b of state.hb.bets || []){
+        const mid = Number(b.marketId||0);
+        if (!betsByMarket.has(mid)) betsByMarket.set(mid, []);
+        betsByMarket.get(mid).push(b);
+      }
+      for (const raw of state.hb.markets || []){
+        const id = Number(raw.id||0);
+        if (!id) continue;
+        const sym = String(raw.symbol||"UNK").toUpperCase();
+        const q = getQuote(sym + "/USD");
+        const openAt = Number(raw.opensAtSec||nowSec());
+        const lockAt = Number(raw.closesAtSec||openAt+60);
+        const closeAt = Number(raw.closesAtSec||lockAt);
+        const strike = Number(q.price||100);
+        const band = Math.max(0.01, Math.min(5, strike * 0.005));
+        const m = {
+          id,
+          symbol: sym,
+          strike,
+          band,
+          openAt,
+          lockAt,
+          closeAt,
+          bets: [],
+          poolUp: 0,
+          poolDown: 0,
+          poolFlat: 0,
+          poolTotal: 0,
+          settle: null,
+          hb: raw,
+        };
+        const b = betsByMarket.get(id) || [];
+        for (const it of b){
+          const bucket = hbOutcomeToBucket(Number(raw.outcomes||3), Number(it.outcome||0));
+          const amt = (Number(it.netMicros||0) / 1e6);
+          if (!Number.isFinite(amt) || amt <= 0) continue;
+          m.bets.push({who: String(it.user||"anon"), bucket, amt});
+          if (bucket === "UP") m.poolUp += amt;
+          if (bucket === "DOWN") m.poolDown += amt;
+          if (bucket === "FLAT") m.poolFlat += amt;
+          m.poolTotal += amt;
+        }
+        const st = String(raw.status||"").toUpperCase();
+        if (st === "VOID"){
+          m.settle = {price: strike, win: "VOID", winningPool: 0};
+        } else if (st === "SETTLED"){
+          const out = Number(raw.settledOutcome||0);
+          const win = hbOutcomeToBucket(Number(raw.outcomes||3), out);
+          const wp = (win==="UP") ? m.poolUp : (win==="DOWN" ? m.poolDown : m.poolFlat);
+          m.settle = {price: strike, win, winningPool: wp};
+        }
+        state.markets.set(id, m);
+      }
+      if (state.activeMktId && !state.markets.has(state.activeMktId)) state.activeMktId = 0;
+      if (!state.activeMktId && state.markets.size) state.activeMktId = Math.max(...state.markets.keys());
+    }
+
+    const fmt = {
+      nowHHMMSS(){
+        const d = new Date();
+        const p = (n)=>String(n).padStart(2,"0");
+        return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+      },
+      pct(p){
