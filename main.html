@@ -1230,3 +1230,115 @@ Ctrl/Cmd+Shift+C copy last line
       const m = createMarket(state.activeSym, strike, band, open|0, lock|0, close|0);
       tape("MKT", `+ created #${m.id} ${m.symbol}`);
       renderWatch();
+      renderMarketBoxes();
+    }
+
+    function cmdBet(args){
+      if (args.length < 3){ tape("BET", "! usage: bet <up|down|flat> <amt>"); return; }
+      const m = state.markets.get(state.activeMktId) || null;
+      if (!m){ tape("BET", "! no active market"); return; }
+      const b = String(args[1]).toLowerCase();
+      const amt = Number(args[2]);
+      if (!(amt>0)){ tape("BET", "! amount must be >0"); return; }
+      const bucket = (b==="up")?"UP":(b==="down")?"DOWN":(b==="flat")?"FLAT":"";
+      if (!bucket){ tape("BET", "! bucket must be up/down/flat"); return; }
+      if (!placeBet(m, "YOU", bucket, amt)){ tape("BET", "! market not open"); return; }
+      tape("BET", `+ YOU ${bucket} ${fmt.money2(amt)}`);
+      renderMarketBoxes();
+    }
+
+    function cmdSettle(args){
+      if (args.length < 2){ tape("SET", "! usage: settle <price>"); return; }
+      const m = state.markets.get(state.activeMktId) || null;
+      if (!m){ tape("SET", "! no active market"); return; }
+      const price = Number(args[1]);
+      if (!(price>0)){ tape("SET", "! bad price"); return; }
+      const s = settleMarket(m, price);
+      if (!s){ tape("SET", "! market not closable yet"); return; }
+      tape("SET", `+ settled #${m.id} final=${fmt.money2(price)} winner=${s.win}`);
+      renderMarketBoxes();
+    }
+
+    async function cmdOracle(args){
+      const op = (args[1]||"id").toLowerCase();
+      if (op === "id"){
+        tape("ORACLE", "oracleKeyHint=" + $("#oracleKeyHint").textContent);
+        tape("ORACLE", "note: local mock; mainnet signs with real key");
+        return;
+      }
+      if (op === "build"){
+        await buildOracleJson();
+        return;
+      }
+      tape("ORACLE", "! usage: oracle id|build");
+    }
+
+    // =============================================================
+    // UI wiring
+    // =============================================================
+
+    function bindUi(){
+      $("#btnRun").onclick = () => {
+        const v = $("#cmdIn").value;
+        $("#cmdIn").value = "";
+        cmd.run(v);
+      };
+      $("#btnClear").onclick = () => cmd.run("clear");
+
+      $("#btnFocus").onclick = () => $("#cmdIn").focus();
+      $("#btnDensity").onclick = () => toggleDensity();
+
+      $("#btnNewMkt").onclick = () => {
+        const strike = Number($("#fStrike").value);
+        const band = Number($("#fBand").value);
+        const open = Number($("#fOpen").value);
+        const lock = Number($("#fLock").value);
+        const close = Number($("#fClose").value);
+        if (!(strike>0 && band>0)) return toast("MKT","bad strike/band");
+        if (!(open < lock && lock < close)) return toast("MKT","need open<lock<close");
+        const m = createMarket(state.activeSym, strike, band, open|0, lock|0, close|0);
+        tape("MKT", `+ created #${m.id} ${m.symbol}`);
+        renderMarketBoxes();
+        renderWatch();
+      };
+
+      $("#btnUp").onclick = () => betUi("UP");
+      $("#btnDown").onclick = () => betUi("DOWN");
+      $("#btnFlat").onclick = () => betUi("FLAT");
+      $("#btnSettle").onclick = () => {
+        const m = state.markets.get(state.activeMktId) || null;
+        if (!m) return toast("SET","no active market");
+        const q = getQuote(m.symbol);
+        const s = settleMarket(m, q.price);
+        if (!s) return toast("SET","market not closable yet");
+        tape("SET", `+ settled #${m.id} final=${fmt.money2(q.price)} winner=${s.win}`);
+        renderMarketBoxes();
+      };
+
+      $("#btnOracleBuild").onclick = () => buildOracleJson();
+      $("#btnCopyJson").onclick = () => {
+        if (copyText(state.lastOracleJson)) toast("CLIP","copied JSON");
+        else toast("CLIP","nothing to copy");
+      };
+      $("#btnCopySig").onclick = () => {
+        if (copyText(state.lastOracleSig)) toast("CLIP","copied sig");
+        else toast("CLIP","nothing to copy");
+      };
+      $("#btnCopyDigest").onclick = () => {
+        if (copyText(state.lastOracleDigest)) toast("CLIP","copied digest");
+        else toast("CLIP","nothing to copy");
+      };
+
+      $("#cmdIn").addEventListener("keydown", (e) => {
+        if (e.key === "Enter"){
+          e.preventDefault();
+          $("#btnRun").click();
+        }
+      });
+
+      window.addEventListener("keydown", (e) => {
+        const mod = e.ctrlKey || e.metaKey;
+        if (mod && e.key.toLowerCase() === "k"){
+          e.preventDefault();
+          $("#cmdIn").focus();
+        }
