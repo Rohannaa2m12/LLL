@@ -1006,3 +1006,115 @@ Ctrl/Cmd+Shift+C copy last line
       const tot = Math.max(1e-9, up+dn+fl);
       const bars = [
         {k:"UP", v:up, col:"rgba(70,220,160,.85)"},
+        {k:"DOWN", v:dn, col:"rgba(255,96,96,.85)"},
+        {k:"FLAT", v:fl, col:"rgba(255,190,80,.85)"},
+      ];
+      const pad = 14;
+      const bw = (W - pad*2) / bars.length;
+      const max = Math.max(...bars.map(b=>b.v), 1e-9);
+
+      ctx.font = "12px " + getComputedStyle(document.documentElement).getPropertyValue("--mono");
+      ctx.textBaseline = "alphabetic";
+
+      bars.forEach((b, i) => {
+        const x = pad + i*bw + 10;
+        const h = (H - 40) * (b.v / max);
+        const y = H - 24 - h;
+        ctx.fillStyle = b.col;
+        ctx.fillRect(x, y, bw-20, h);
+        ctx.fillStyle = "rgba(224,231,239,.85)";
+        ctx.fillText(b.k, x+6, H-10);
+        const pct = (b.v / tot) * 100;
+        ctx.fillStyle = "rgba(184,196,210,.92)";
+        ctx.fillText(pct.toFixed(1) + "%", x+6, y-6);
+      });
+    }
+
+    async function oracleInit(){
+      state.oracleKey = crypto.getRandomValues(new Uint8Array(32));
+      const h = await sha3_256(state.oracleKey);
+      const hint = hex.to(h).slice(0, 2+16) + "…";
+      $("#oracleKeyHint").textContent = hint;
+      state.oracleNonce = 1000 + Math.floor(Math.random()*9000);
+      $("#oracleNonceChip").textContent = String(state.oracleNonce);
+      tape("ORACLE", "local oracle key seeded");
+    }
+
+    async function buildOracleJson(){
+      const m = state.markets.get(state.activeMktId) || null;
+      if (!m || !m.settle){
+        toast("ORACLE", "need a settled market");
+        return;
+      }
+      const symbolHash = await sha3_256(bytes.utf8(m.symbol));
+      const symbolHashHex = hex.to(symbolHash);
+      const nonce = ++state.oracleNonce;
+      $("#oracleNonceChip").textContent = String(state.oracleNonce);
+
+      const meta = crypto.getRandomValues(new Uint8Array(32));
+      const priceE8 = fmt.e8(m.settle.price);
+
+      // local digest: not exact ABI/EIP712; deterministic payload for UI use
+      const data = bytes.concat(
+        bytes.utf8("LMX_MARKET_TYPEHASH"),
+        bytes.u256(m.id),
+        symbolHash,
+        bytes.u64(priceE8),
+        bytes.u64(BigInt(m.lockAt)),
+        bytes.u64(BigInt(m.closeAt)),
+        bytes.u256(BigInt(nonce)),
+        meta,
+      );
+      const digest = await sha3_256(data);
+      const r = await sha3_256(bytes.concat(state.oracleKey, digest));
+      const s = await sha3_256(bytes.concat(digest, state.oracleKey));
+      const v = 27 + (r[0] & 1);
+      const sig = bytes.concat(r, s, new Uint8Array([v]));
+
+      const payload = {
+        marketId: m.id,
+        symbolHash: symbolHashHex,
+        priceE8: priceE8.toString(),
+        lockAt: m.lockAt,
+        closeAt: m.closeAt,
+        oracleNonce: nonce,
+        meta: hex.to(meta),
+        digest: hex.to(digest),
+        sig: hex.to(sig),
+      };
+
+      const json = JSON.stringify(payload, null, 2);
+      state.lastOracleJson = json;
+      state.lastOracleSig = payload.sig;
+      state.lastOracleDigest = payload.digest;
+
+      $("#oracleDigest").textContent = payload.digest.slice(0, 2+18) + "…";
+      renderOracleBox(true);
+      toast("ORACLE", "built JSON (use COPY)");
+      tape("ORACLE", "built settlement payload");
+    }
+
+    function renderOracleBox(flash){
+      const m = state.markets.get(state.activeMktId) || null;
+      const info = [];
+      info.push("ORACLE PAYLOAD");
+      info.push("------------");
+      info.push("activeMkt=" + (m ? ("#"+m.id) : "—"));
+      info.push("activeSym=" + state.activeSym);
+      info.push("settled=" + (m && m.settle ? "yes" : "no"));
+      if (m && m.settle){
+        info.push("final=" + fmt.money2(m.settle.price) + " winner=" + m.settle.win);
+      }
+      info.push("");
+      info.push("json:");
+      info.push(state.lastOracleJson ? state.lastOracleJson : "(build first)");
+      $("#oracleBox").textContent = info.join("\n");
+      if (flash) $("#oracleBox").scrollTop = 0;
+    }
+
+    function copyText(s){
+      const t = String(s||"");
+      if (!t) return false;
+      navigator.clipboard.writeText(t).catch(()=>{});
+      return true;
+    }
