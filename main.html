@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>LLL — Lama Love Ledger</title>
+  <style>
+    :root{
+      --bg0:#0b0e12;
+      --bg1:#10151c;
+      --bg2:#141b25;
+      --edge:#1c2633;
+      --fg0:#e0e7ef;
+      --fg1:#b8c4d2;
+      --dim:#7e8aa0;
+      --lime:#46dca0;
+      --amber:#ffbe50;
+      --cyan:#5acbff;
+      --blue:#7a90ff;
+      --red:#ff6060;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      --radius: 12px;
+      --shadow: 0 14px 40px rgba(0,0,0,.45);
+      --glow: 0 0 0 1px rgba(122,144,255,.15), 0 12px 30px rgba(0,0,0,.55);
+      --cell: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background: radial-gradient(1200px 900px at 20% 10%, rgba(90,203,255,.08), transparent 55%),
+                  radial-gradient(900px 700px at 80% 25%, rgba(255,190,80,.06), transparent 52%),
+                  radial-gradient(1200px 900px at 55% 90%, rgba(70,220,160,.06), transparent 52%),
+                  var(--bg0);
+      color:var(--fg0);
+      font-family:var(--sans);
+      overflow:hidden;
+    }
+    a{color:inherit}
+    .mono{font-family:var(--mono)}
+    .dim{color:var(--dim)}
+    .accent{color:var(--amber); font-weight:700}
+    .ok{color:var(--lime); font-weight:700}
+    .warn{color:var(--amber); font-weight:700}
+    .bad{color:var(--red); font-weight:700}
+    .chip{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:6px 10px; border:1px solid var(--edge); border-radius:999px;
+      background:rgba(255,255,255,.02);
+      font-family:var(--mono); font-size:12px; color:var(--fg1);
+    }
+    .chip b{color:var(--fg0)}
+    .btn{
+      display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      padding:9px 12px; border-radius:10px;
+      border:1px solid var(--edge);
+      background:rgba(255,255,255,.03);
+      color:var(--fg0);
+      font-family:var(--mono); font-size:12px; font-weight:700;
+      cursor:pointer; user-select:none;
+      transition: transform .07s ease, background .15s ease, border-color .15s ease;
+      white-space:nowrap;
+    }
+    .btn:hover{background:rgba(255,255,255,.05); border-color:#253244}
+    .btn:active{transform: translateY(1px)}
+    .btn.primary{border-color:rgba(122,144,255,.35); box-shadow:var(--glow)}
+    .btn.lime{color:var(--lime); border-color:rgba(70,220,160,.25)}
+    .btn.cyan{color:var(--cyan); border-color:rgba(90,203,255,.25)}
+    .btn.amber{color:var(--amber); border-color:rgba(255,190,80,.25)}
+    .btn.red{color:var(--red); border-color:rgba(255,96,96,.25)}
+    .grid{
+      display:grid;
+      grid-template-columns: 1.35fr 0.95fr;
+      grid-template-rows: 62px 1fr 132px;
+      gap:14px;
+      height:100%;
+      padding:14px;
+    }
+    .panel{
+      background: var(--cell);
+      border: 1px solid var(--edge);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      position:relative;
+    }
+    .panelHeader{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 14px;
+      background: rgba(0,0,0,.22);
+      border-bottom:1px solid var(--edge);
+    }
+    .panelHeader .title{
+      display:flex; align-items:baseline; gap:10px;
+      font-family:var(--mono);
+      font-weight:800;
+      letter-spacing:.04em;
+      font-size:13px;
+      color:var(--fg0);
+    }
+    .panelHeader .title .tag{
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.08);
+      color:var(--fg1);
+      font-weight:700;
+      font-size:11px;
+    }
+    .panelHeader .right{
+      display:flex; gap:10px; align-items:center;
